@@ -33,41 +33,41 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
     }
 
     private[this] final val Keywords = Map(
-        "async"      -> Token.Async,
-        "break"      -> Token.Break,
-        "case"       -> Token.Case,
-        "catch"      -> Token.Catch,
-        "chan"       -> Token.Chan,
-        "class"      -> Token.Class,
-        "const"      -> Token.Const,
-        "continue"   -> Token.Continue,
-        "default"    -> Token.Default,
-        "defer"      -> Token.Defer,
-        "else"       -> Token.Else,
-        "extends"    -> Token.Extends,
-        "false"      -> Token.False,
-        "finally"    -> Token.Finally,
-        "for"        -> Token.For,
-        "func"       -> Token.Func,
-        "if"         -> Token.If,
-        "implements" -> Token.Implements,
-        "import"     -> Token.Import,
-        "in"         -> Token.In,
-        "interface"  -> Token.Interface,
-        "map"        -> Token.Map,
-        "new"        -> Token.New,
-        "nil"        -> Token.Nil,
-        "package"    -> Token.Package,
-        "return"     -> Token.Return,
-        "select"     -> Token.Select,
-        "struct"     -> Token.Struct,
-        "switch"     -> Token.Switch,
-        "template"   -> Token.Template,
-        "throw"      -> Token.Throw,
-        "true"       -> Token.True,
-        "try"        -> Token.Try,
-        "type"       -> Token.Type,
-        "var"        -> Token.Var,
+        "break"     -> Token.Break,
+        "case"      -> Token.Case,
+        "catch"     -> Token.Catch,
+        "chan"      -> Token.Chan,
+        "class"     -> Token.Class,
+        "const"     -> Token.Const,
+        "continue"  -> Token.Continue,
+        "default"   -> Token.Default,
+        "defer"     -> Token.Defer,
+        "else"      -> Token.Else,
+        "enum"      -> Token.Enum,
+        "extends"   -> Token.Extends,
+        "false"     -> Token.False,
+        "finally"   -> Token.Finally,
+        "for"       -> Token.For,
+        "func"      -> Token.Func,
+        "go"        -> Token.Go,
+        "if"        -> Token.If,
+        "import"    -> Token.Import,
+        "in"        -> Token.In,
+        "interface" -> Token.Interface,
+        "new"       -> Token.New,
+        "nil"       -> Token.Nil,
+        "package"   -> Token.Package,
+        "return"    -> Token.Return,
+        "select"    -> Token.Select,
+        "struct"    -> Token.Struct,
+        "super"     -> Token.Super,
+        "switch"    -> Token.Switch,
+        "throw"     -> Token.Throw,
+        "true"      -> Token.True,
+        "try"       -> Token.Try,
+        "type"      -> Token.Type,
+        "with"      -> Token.With,
+        "var"       -> Token.Var,
     )
 
     private[this] final val Operators = OpTree(
@@ -96,7 +96,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         "&&"  -> Token.`&&`,
         "||"  -> Token.`||`,
         "!"   -> Token.`!`,
-        "->"  -> Token.`->`,
+        "=>"  -> Token.`=>`,
         "<-"  -> Token.`<-`,
         "++"  -> Token.`++`,
         "--"  -> Token.`--`,
@@ -572,8 +572,11 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
 
         /* check for keywords */
         ret.result().toSeq.str match {
-            case Keywords(x) => Token.Keyword(x)
-            case s           => Token.Name(s)
+            case Keywords(Token.Nil)   => Token.Nil()
+            case Keywords(Token.True)  => Token.Bool(true)
+            case Keywords(Token.False) => Token.Bool(false)
+            case Keywords(x)           => Token.Keyword(x)
+            case s                     => Token.Name(s)
         }
     }
 }
