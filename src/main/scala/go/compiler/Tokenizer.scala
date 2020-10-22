@@ -9,30 +9,8 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-case class Tokenizer(src: String, fname: String) extends Location.Carrier {
-    trait State {
-        def col: Int
-        def row: Int
-        def pos: Int
-    }
-
-    private[this] case class TState(
-        var col: Int = 0,
-        var row: Int = 0,
-        var pos: Int = 0
-    ) extends State
-
-    private[this] var s  : TState = TState()
-    private[this] var st : TState = TState()
-
-    private[this] val buf: Seq[Int] = {
-        src.codePoints().iterator().asScala.toIndexedSeq.map(_.intValue) match {
-            case v @ _ :+ '\n' => v
-            case v             => v :+ '\n'
-        }
-    }
-
-    private[this] final val Keywords = Map(
+object Tokenizer {
+    private final val Keywords = Map(
         "break"     -> Token.Break,
         "case"      -> Token.Case,
         "catch"     -> Token.Catch,
@@ -70,7 +48,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         "var"       -> Token.Var,
     )
 
-    private[this] final val Operators = OpTree(
+    private final val Operators = OpTree(
         "+"   -> Token.`+`,
         "-"   -> Token.`-`,
         "*"   -> Token.`*`,
@@ -122,7 +100,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         "?"   -> Token.`?`,
     )
 
-    private[this] final val StdEscape = Map(
+    private final val StdEscape = Map(
         ('"'  : Int) -> Array[Byte]('\"'),
         ('a'  : Int) -> Array[Byte](0x07),
         ('b'  : Int) -> Array[Byte]('\b'),
@@ -135,6 +113,48 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         ('\\' : Int) -> Array[Byte]('\\'),
     )
 
+    trait State {
+        def col: Int
+        def row: Int
+        def pos: Int
+    }
+
+    /** Character Classes **/
+
+    private def isBin(ch: Int): Boolean = ch == '0' || ch == '1'
+    private def isOct(ch: Int): Boolean = '0' <= ch && ch <= '7'
+    private def isHex(ch: Int): Boolean = '0' <= ch && ch <= '9' || 'a' <= ch && ch <= 'f' || 'A' <= ch && ch <= 'F'
+
+    /** Implicit Conversions **/
+
+    private implicit class SeqIntOps(v: Seq[Int]) extends IterableIntOps(v)
+    private implicit class ArrayIntOps(v: Array[Int]) extends IterableIntOps(v)
+
+    private[this] sealed abstract class IterableIntOps(v: Iterable[Int]) {
+        def str   : String      = v.map(Character.toString).mkString
+        def bytes : Array[Byte] = v.flatMap(Character.toString(_).getBytes).toArray
+    }
+}
+
+case class Tokenizer(src: String, fname: String) extends Location.Carrier {
+    import Tokenizer._
+
+    private[this] case class TState(
+        var col: Int = 0,
+        var row: Int = 0,
+        var pos: Int = 0
+    ) extends State
+
+    private[this] var s  : TState = TState()
+    private[this] var st : TState = TState()
+
+    private[this] val buf: Seq[Int] = {
+        src.codePoints().iterator().asScala.toIndexedSeq.map(_.intValue) match {
+            case v @ _ :+ '\n' => v
+            case v             => v :+ '\n'
+        }
+    }
+
     override def col  : Int    = st.col
     override def row  : Int    = st.row
     override val file : String = fname
@@ -143,19 +163,6 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
     def next              : Token   = parse()
     def state             : State   = s.copy()
     def state_=(v: State) : Unit    = s = TState(v.col, v.row, v.pos)
-
-    /** Implicit Conversions **/
-
-    private[this] implicit class SeqIntOps(v: Seq[Int]) {
-        def str   : String      = v.map(Character.toString).mkString
-        def bytes : Array[Byte] = v.flatMap(Character.toString(_).getBytes()).toArray
-    }
-
-    /** Character Classes **/
-
-    private[this] def isBin(ch: Int): Boolean = ch == '0' || ch == '1'
-    private[this] def isOct(ch: Int): Boolean = '0' <= ch && ch <= '7'
-    private[this] def isHex(ch: Int): Boolean = '0' <= ch && ch <= '9' || 'a' <= ch && ch <= 'f' || 'A' <= ch && ch <= 'F'
 
     /** Character Readers **/
 
@@ -480,13 +487,13 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         nch match {
             case 'i'       => parseNumberComplex(rem)
             case 'e' | 'E' => parseNumberScientific(rem)
-            case _         => Token.Float(JDouble.parseDouble(rem.result().toSeq.str))
+            case _         => Token.Float(JDouble.parseDouble(rem.result().str))
         }
     }
 
     private[this] def parseNumberComplex(ret: mutable.ArrayBuilder[Int]): Token = {
         nextChar
-        Token.Complex(JDouble.parseDouble(ret.result().toSeq.str))
+        Token.Complex(JDouble.parseDouble(ret.result().str))
     }
 
     private[this] def parseNumberScientific(ret: mutable.ArrayBuilder[Int]): Token = {
@@ -513,7 +520,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         } else if (nch == 'i') {
             parseNumberComplex(ret)
         } else {
-            Token.Float(JDouble.parseDouble(rem.result().toSeq.str))
+            Token.Float(JDouble.parseDouble(rem.result().str))
         }
     }
 
@@ -529,7 +536,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
 
         /* check for result */
         if (!isHex(nch) && ret.knownSize != 0) {
-            Token.Integer(BigInt(ret.result().toSeq.str, base))
+            Token.Integer(BigInt(ret.result().str, base))
         } else {
             throw SyntaxError(s"invalid $name digit")
         }
@@ -571,7 +578,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
         }
 
         /* check for keywords */
-        ret.result().toSeq.str match {
+        ret.result().str match {
             case Keywords(Token.Nil)   => Token.Nil()
             case Keywords(Token.True)  => Token.Bool(true)
             case Keywords(Token.False) => Token.Bool(false)
