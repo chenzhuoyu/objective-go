@@ -15,6 +15,12 @@ object AST {
     sealed trait CompositeType
     sealed trait SimpleStatement extends Statement
 
+    sealed trait Variance {
+        case object Invariant     extends Variance
+        case object Covariant     extends Variance
+        case object Contravariant extends Variance
+    }
+
     sealed trait ReceiverMode {
         case object Addr      extends ReceiverMode
         case object Value     extends ReceiverMode
@@ -79,6 +85,7 @@ object AST {
 
     case class TypeName(
         name  : Name,
+        specs : Seq[TypeName],
         scope : Option[Name],
     )(implicit p: Location) extends AST with Type with CompositeType
 
@@ -187,6 +194,7 @@ object AST {
         name  : Name,
         vtype : Type,
         alias : Boolean,
+        types : Seq[GenericSpec],
     )(implicit p: Location) extends AST with Statement
 
     case class ValueSpec(
@@ -196,12 +204,18 @@ object AST {
         consts : Boolean,
     )(implicit p: Location) extends AST with SimpleStatement
 
-    case class Function(
+    case class GenericSpec(
         name: Name,
-        body: Block,
-        tags: Seq[Annotation],
-        fsig: FunctionSignature,
-        recv: Option[FunctionReceiver]
+        mode: Variance,
+    )(implicit p: Location) extends AST with SimpleStatement
+
+    case class Function(
+        name  : Name,
+        body  : Block,
+        tags  : Seq[Annotation],
+        fsig  : FunctionSignature,
+        recv  : Option[FunctionReceiver],
+        types : Seq[Name],
     )(implicit p: Location) extends AST
 
     case class FunctionReceiver(
