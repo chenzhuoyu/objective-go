@@ -35,6 +35,7 @@ object Token {
     case object Interface extends KeywordType
     case object New       extends KeywordType
     case object Nil       extends KeywordType
+    case object Override  extends KeywordType
     case object Package   extends KeywordType
     case object Return    extends KeywordType
     case object Select    extends KeywordType

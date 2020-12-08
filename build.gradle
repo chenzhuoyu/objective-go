@@ -13,5 +13,5 @@ dependencies {
 }
 
 application {
-    mainClassName = "go.App"
+    mainClassName = "go.cmd.Main"
 }

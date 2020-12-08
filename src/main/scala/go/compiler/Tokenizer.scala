@@ -1,10 +1,9 @@
 package go.compiler
 
-import java.lang.{Double => JDouble}
-import java.nio.charset.StandardCharsets
-
 import go.utils.{Location, OpTree}
 
+import java.lang.{Double => JDouble}
+import java.nio.charset.StandardCharsets
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -34,6 +33,7 @@ object Tokenizer {
         "interface" -> Token.Interface,
         "new"       -> Token.New,
         "nil"       -> Token.Nil,
+        "override"  -> Token.Override,
         "package"   -> Token.Package,
         "return"    -> Token.Return,
         "select"    -> Token.Select,
