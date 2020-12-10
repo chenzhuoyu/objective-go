@@ -77,6 +77,7 @@ class TestTokenizer {
             "extends"   -> Token.Extends,
             "finally"   -> Token.Finally,
             "for"       -> Token.For,
+            "from"      -> Token.From,
             "func"      -> Token.Func,
             "go"        -> Token.Go,
             "if"        -> Token.If,

@@ -15,38 +15,35 @@ object AST {
     sealed trait CompositeType
     sealed trait SimpleStatement extends Statement
 
-    sealed trait Variance {
-        case object Invariant     extends Variance
-        case object Covariant     extends Variance
-        case object Contravariant extends Variance
-    }
+    sealed trait Variance
+    sealed trait ReceiverMode
 
-    sealed trait ReceiverMode {
-        case object Addr      extends ReceiverMode
-        case object Value     extends ReceiverMode
-        case object Reference extends ReceiverMode
-    }
+    case object Invariant     extends Variance
+    case object Covariant     extends Variance
+    case object Contravariant extends Variance
+
+    case object ValueReceiver     extends ReceiverMode
+    case object PointerReceiver   extends ReceiverMode
+    case object ReferenceReceiver extends ReceiverMode
 
     /** AST Primitives **/
 
+    case class Nil      ()                         (implicit p: Location) extends AST with Literal
     case class Name     (name: String)             (implicit p: Location) extends AST with Operand
     case class Operator (kind: Token.OperatorType) (implicit p: Location) extends AST
 
-    case class IntLit     (v: BigInt)      (implicit p: Location) extends AST with Literal
     case class BoolLit    (v: Boolean)     (implicit p: Location) extends AST with Literal
     case class RuneLit    (v: Int)         (implicit p: Location) extends AST with Literal
     case class FloatLit   (v: Double)      (implicit p: Location) extends AST with Literal
     case class StringLit  (v: Array[Byte]) (implicit p: Location) extends AST with Literal
+    case class IntegerLit (v: BigInt)      (implicit p: Location) extends AST with Literal
     case class ComplexLit (v: Double)      (implicit p: Location) extends AST with Literal
 
     /** Types **/
 
-    case class MapType       (key: Type, elem: Type)                 (implicit p: Location) extends AST with Type with CompositeType
-    case class ArrayType     (elem: Type, len: Option[Expression])   (implicit p: Location) extends AST with Type with CompositeType
-    case class SliceType     (elem: Type)                            (implicit p: Location) extends AST with Type with CompositeType
-    case class ChannelType   (elem: Type, in: Boolean, out: Boolean) (implicit p: Location) extends AST with Type
-    case class PointerType   (base: Type)                            (implicit p: Location) extends AST with Type
-    case class FunctionType  (fsig: FunctionSignature)               (implicit p: Location) extends AST with Type
+    case class ArrayType    (elem: Type, len: Option[Expression]) (implicit p: Location) extends AST with Type with CompositeType
+    case class PointerType  (base: Type)                          (implicit p: Location) extends AST with Type
+    case class FunctionType (fsig: FunctionSignature)             (implicit p: Location) extends AST with Type
 
     case class EnumType(
         vals: Seq[EnumItem],
@@ -55,7 +52,7 @@ object AST {
 
     case class ClassType(
         base   : Option[TypeName],
-        impl   : Seq[TypeName],
+        intf   : Seq[TypeName],
         tags   : Seq[Annotation],
         fields : Seq[StructField],
     )(implicit p: Location) extends AST with Type
@@ -85,7 +82,7 @@ object AST {
 
     case class TypeName(
         name  : Name,
-        specs : Seq[TypeName],
+        impl  : Seq[Type],
         scope : Option[Name],
     )(implicit p: Location) extends AST with Type with CompositeType
 
@@ -148,14 +145,14 @@ object AST {
     )(implicit p: Location) extends AST with Operand
 
     case class Construct(
-        vtype: ClassType,
-        cargs: Seq[Expression],
+        name: TypeName,
+        args: Option[Invoke],
     )(implicit p: Location) extends AST with Operand
 
     case class Expression(
-        op    : Option[Operator],
-        left  : Either[Primary, Expression],
-        right : Option[Expression],
+        left  : Either[Expression, Primary],
+        op    : Option[Operator] = None,
+        right : Option[Expression] = None,
     )(implicit p: Location) extends AST with Operand with Element with SimpleStatement
 
     case class CompositeValue   (vv: Seq[CompositeElement])            (implicit p: Location) extends AST with Element
@@ -175,13 +172,19 @@ object AST {
 
     case class Invoke(
         varg: Boolean,
+        impl: Seq[Type],
         args: Seq[Expression],
+    )(implicit p: Location) extends AST with Modifier
+
+    case class Method(
+        name: Name,
+        args: Invoke,
     )(implicit p: Location) extends AST with Modifier
 
     /** Top Level Declarations **/
 
     case class Import(
-        path  : String,
+        path  : StringLit,
         items : Seq[ImportName],
     )(implicit p: Location) extends AST
 
@@ -205,17 +208,19 @@ object AST {
     )(implicit p: Location) extends AST with SimpleStatement
 
     case class GenericSpec(
-        name: Name,
-        mode: Variance,
+        name  : Name,
+        mode  : Variance,
+        lower : Option[TypeName],
+        upper : Option[TypeName],
     )(implicit p: Location) extends AST with SimpleStatement
 
     case class Function(
         name  : Name,
-        body  : Block,
+        body  : Option[Block],
         tags  : Seq[Annotation],
         fsig  : FunctionSignature,
         recv  : Option[FunctionReceiver],
-        types : Seq[Name],
+        types : Seq[GenericSpec],
     )(implicit p: Location) extends AST
 
     case class FunctionReceiver(
@@ -270,7 +275,7 @@ object AST {
 
     case class Assign(
         kind: Operator,
-        vals: Seq[(Expression, Expression)]
+        vals: Seq[(Primary, Expression)]
     )(implicit p: Location) extends AST with SimpleStatement
 
     case class If(

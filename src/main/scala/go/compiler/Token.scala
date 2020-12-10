@@ -27,6 +27,7 @@ object Token {
     case object False     extends KeywordType
     case object Finally   extends KeywordType
     case object For       extends KeywordType
+    case object From      extends KeywordType
     case object Func      extends KeywordType
     case object Go        extends KeywordType
     case object If        extends KeywordType
@@ -98,6 +99,9 @@ object Token {
     case object `;`   extends OperatorType
     case object `:`   extends OperatorType
     case object `?`   extends OperatorType
+
+    case class Prefix(op: OperatorType) extends OperatorType
+    case class Postfix(op: OperatorType) extends OperatorType
 
     case class LF        ()                (implicit val p: Location) extends Token
     case class End       ()                (implicit val p: Location) extends Token

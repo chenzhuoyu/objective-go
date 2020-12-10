@@ -25,6 +25,7 @@ object Tokenizer {
         "false"     -> Token.False,
         "finally"   -> Token.Finally,
         "for"       -> Token.For,
+        "from"      -> Token.From,
         "func"      -> Token.Func,
         "go"        -> Token.Go,
         "if"        -> Token.If,
@@ -200,6 +201,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
 
     @tailrec
     private[this] def skipSpace(ch: Int): Int = ch match {
+        case '\n'                           => '\n'
         case c if Character.isWhitespace(c) => skipSpace(readChar)
         case c                              => c
     }
@@ -234,8 +236,7 @@ case class Tokenizer(src: String, fname: String) extends Location.Carrier {
     }
 
     private[this] def skipBlockComments(): Option[Int] = {
-        readFast(s.pos, buf.indexOfSlice("*/", s.pos), 2)
-        None
+        readFast(s.pos, buf.indexOfSlice("*/", s.pos), 2).find(_ == '\n')
     }
 
     /** Component Readers **/
