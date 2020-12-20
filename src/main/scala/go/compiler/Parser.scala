@@ -179,17 +179,243 @@ case class Parser(tk: Tokenizer) extends Carrier {
     /** Type Parsing **/
 
     private[this] def parseType(): AST.Type = {
-        _ // TODO: parse type
+        save { implicit p => next match {
+            case Token.Name(v)                  => parseScopedType(AST.Name(v))
+            case Token.Keyword(Token.Map)       => parseMapType()
+            case Token.Keyword(Token.Enum)      => parseEnumType(Seq())
+            case Token.Keyword(Token.Chan)      => parseChannelType()
+            case Token.Keyword(Token.Func)      => parseFunctionType()
+            case Token.Keyword(Token.Class)     => parseClassType(Seq())
+            case Token.Keyword(Token.Struct)    => parseStructType(Seq())
+            case Token.Keyword(Token.Interface) => parseInterfaceType(Seq(), true)
+            case Token.Operator(Token.`[`)      => parseSeqType()
+            case Token.Operator(Token.`*`)      => parsePointerType()
+            case Token.Operator(Token.`<-`)     => parseOutChannelType()
+            case Token.Operator(Token.`@`)      => parseAnnotationType(Seq())
+            case _                              => throw SyntaxError("type expected")
+        }}
     }
 
-    private[this] def parseTypeName(): AST.TypeName = {
-        _ // TODO: pkg.Type
+    private[this] def parseNamedType(): AST.TypeName = {
+        next match {
+            case p @ Token.Name(v) => parseScopedType(AST.Name(v)(p))(p)
+            case _                 => throw SyntaxError("identifier expected")
+        }
+    }
+
+    private[this] def parseAnonymousType(): AST.Type = {
+        save { implicit p => next match {
+            case Token.Name(v)                  => parseScopedType(AST.Name(v))
+            case Token.Keyword(Token.Map)       => parseMapType()
+            case Token.Keyword(Token.Enum)      => throw SyntaxError("cannot define anonymous enums")
+            case Token.Keyword(Token.Chan)      => parseChannelType()
+            case Token.Keyword(Token.Func)      => parseFunctionType()
+            case Token.Keyword(Token.Class)     => throw SyntaxError("cannot define anonymous classes")
+            case Token.Keyword(Token.Struct)    => parseStructType(Seq())
+            case Token.Keyword(Token.Interface) => parseInterfaceType(Seq(), false)
+            case Token.Operator(Token.`*`)      => parsePointerType()
+            case Token.Operator(Token.`[`)      => parseSeqType()
+            case Token.Operator(Token.`<-`)     => parseOutChannelType()
+            case Token.Operator(Token.`@`)      => throw SyntaxError("cannot define anonymous annotations")
+            case _                              => throw SyntaxError("type expected")
+        }}
+    }
+
+    private[this] def parseAnnotatedType(tags: Seq[AST.Annotation]): AST.Type = {
+        save { implicit p => next match {
+            case Token.Name(_)                  => throw SyntaxError("cannot annotate type names")
+            case Token.Keyword(Token.Map)       => throw SyntaxError("cannot annotate maps")
+            case Token.Keyword(Token.Enum)      => parseEnumType(tags)
+            case Token.Keyword(Token.Chan)      => throw SyntaxError("cannot annotate channels")
+            case Token.Keyword(Token.Func)      => throw SyntaxError("cannot annotate anonymous functions")
+            case Token.Keyword(Token.Class)     => parseClassType(tags)
+            case Token.Keyword(Token.Struct)    => parseStructType(tags)
+            case Token.Keyword(Token.Interface) => parseInterfaceType(tags, true)
+            case Token.Operator(Token.`[`)      => throw SyntaxError("cannot annotate slices or arrays")
+            case Token.Operator(Token.`*`)      => throw SyntaxError("cannot annotate pointers")
+            case Token.Operator(Token.`<-`)     => throw SyntaxError("cannot annotate channels")
+            case Token.Operator(Token.`@`)      => parseAnnotationType(tags)
+            case _                              => throw SyntaxError("type expected")
+        }}
+    }
+
+    /** Specific Type Parsing **/
+
+    private[this] def parseSeqType()(implicit p: Snapshot): AST.Type = {
+        peek match {
+            case Token.Operator(Token.`]`)   => drop(AST.SliceType(parseAnonymousType()))
+            case Token.Operator(Token.`...`) => drop(parseSeqArray(None))
+            case _                           => parseSeqArray(Some(parseExpr()))
+        }
+    }
+
+    private[this] def parseSeqArray(len: Option[AST.Expression])(implicit p: Snapshot): AST.ArrayType = {
+        next match {
+            case Token.Operator(Token.`]`) => AST.ArrayType(parseAnonymousType(), len)
+            case _                         => throw SyntaxError("']' expected")
+        }
+    }
+
+    private[this] def parseMapType()(implicit p: Snapshot): AST.MapType = {
+        next match {
+            case Token.Operator(Token.`[`) => parseMapKeyType(parseAnonymousType())
+            case _                         => throw SyntaxError("'[' expected")
+        }
+    }
+
+    private[this] def parseMapKeyType(k: AST.Type)(implicit p: Snapshot): AST.MapType = {
+        next match {
+            case Token.Operator(Token.`,`) => parseMapValueType(k, parseAnonymousType())
+            case _                         => throw SyntaxError("',' expected")
+        }
+    }
+
+    private[this] def parseMapValueType(k: AST.Type, v: AST.Type)(implicit p: Snapshot): AST.MapType = {
+        next match {
+            case Token.Operator(Token.`]`) => AST.MapType(k, v)
+            case _                         => throw SyntaxError("']' expected")
+        }
+    }
+
+    private[this] def parseEnumType(tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.EnumType = {
+        _ // TODO: enum { ... }
+    }
+
+    private[this] def parseClassType(tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.ClassType = {
+        peek match {
+            case Token.Operator(Token.`:`) => parseClassBase(Some(drop(parseNamedType())), tags)
+            case _                         => parseClassBase(None, tags)
+        }
+    }
+
+    private[this] def parseClassBase(base: Option[AST.TypeName], tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.ClassType = {
+        peek match {
+            case Token.Operator(Token.`(`) => parseClassBody(base, drop(sequence(Token.`)`)(parseNamedType())), tags)
+            case _                         => parseClassBody(base, Seq(), tags)
+        }
+    }
+
+    private[this] def parseClassBody(
+        base: Option[AST.TypeName],
+        intf: Seq[AST.TypeName],
+        tags: Seq[AST.Annotation],
+    )(implicit p: Snapshot): AST.ClassType = {
+        peek match {
+            case Token.Operator(Token.`{`) => AST.ClassType(base, intf, tags, drop(ends(parseStructFields(), Token.`}`)))
+            case _                         => AST.ClassType(None, Seq(), tags, Seq())
+        }
+    }
+
+    private[this] def parseStructType(tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.StructType = {
+        next match {
+            case Token.Operator(Token.`{`) => AST.StructType(parseStructFields(), tags)
+            case _                         => throw SyntaxError("'{' expected")
+        }
+    }
+
+    @tailrec
+    private[this] def parseStructFields(ret: Seq[AST.StructField] = Seq()): Seq[AST.StructField] = {
+        peek match {
+            case Token.Operator(Token.`}`) => drop(ret)
+            case _                         => parseStructFields(ret :+ parseStructMember(parseAnnotationList()))
+        }
+    }
+
+    private[this] def parseStructMember(tags: Seq[AST.Annotation]): AST.StructField = {
+        save { implicit p => peek match {
+            case Token.Name(v) => parseStructMemberName(AST.Name(v)(next), tags)
+            case _             => AST.StructField(parseAnonymousType(), None, tags)
+        }}
+    }
+
+    private[this] def parseStructMemberName(name: AST.Name, tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.StructField = {
+        peek match {
+            case Token.Operator(Token.`.`) => AST.StructField(parseScopedType(name), None, tags)
+            case _                         => AST.StructField(drop(parseAnonymousType()), Some(name), tags)
+        }
+    }
+
+    private[this] def parseScopedType(v: AST.Name)(implicit p: Snapshot): AST.TypeName = {
+        peek match {
+            case Token.Operator(Token.`.`) => drop(parseScopedTypeName(v))
+            case Token.Operator(Token.`[`) => parseScopedTypeImpl(None, v)
+            case _                         => AST.TypeName(v, Seq(), None)
+        }
+    }
+
+    private[this] def parseScopedTypeName(v: AST.Name)(implicit p: Snapshot): AST.TypeName = {
+        next match {
+            case n @ Token.Name(x) => parseScopedTypeImpl(Some(v), AST.Name(x)(n))
+            case n                 => throw SyntaxError("identifier expected")(n)
+        }
+    }
+
+    private[this] def parseScopedTypeImpl(s: Option[AST.Name], n: AST.Name)(implicit p: Snapshot): AST.TypeName = {
+        peek match {
+            case Token.Operator(Token.`[`) => AST.TypeName(n, sequence(Token.`]`)(parseAnonymousType()), s)
+            case _                         => AST.TypeName(n, Seq(), s)
+        }
+    }
+
+    private[this] def parseChannelElem()(implicit p: Snapshot): AST.Type = {
+        next match {
+            case Token.Operator(Token.`[`) => ends(parseAnonymousType(), Token.`]`)
+            case _                         => throw SyntaxError("channel type expected")
+        }
+    }
+
+    private[this] def parseChannelType()(implicit p: Snapshot): AST.ChannelType = {
+        peek match {
+            case Token.Operator(Token.`<-`) => drop(parseInChannelType())
+            case _                          => AST.ChannelType(parseChannelElem(), true, true)
+        }
+    }
+
+    private[this] def parseInChannelType()(implicit p: Snapshot): AST.ChannelType = {
+        AST.ChannelType(parseChannelElem(), true, false)
+    }
+
+    private[this] def parseOutChannelType()(implicit p: Snapshot): AST.ChannelType = {
+        next match {
+            case Token.Keyword(Token.Chan) => AST.ChannelType(parseChannelElem(), false, true)
+            case _                         => throw SyntaxError("keyword 'chan' expected")
+        }
+    }
+
+    private[this] def parsePointerType()(implicit p: Snapshot): AST.PointerType = {
+        AST.PointerType(parseAnonymousType())
+    }
+
+    private[this] def parseFunctionType()(implicit p: Snapshot): AST.FunctionType = {
+        _ // TODO: func (...) ...
+    }
+
+    private[this] def parseInterfaceType(tags: Seq[AST.Annotation], isNamed: Boolean)(implicit p: Snapshot): AST.InterfaceType = {
+        _ // TODO: interface { ... }
+    }
+
+    private[this] def parseAnnotationType(tags: Seq[AST.Annotation])(implicit p: Snapshot): AST.AnnotationType = {
+        _ // TODO: @interface { ... }
+    }
+
+    /** Annotation Parsing **/
+
+    private[this] def parseAnnotation(): AST.Annotation = {
+        _ // TODO: @Annotation(xxx)
+    }
+
+    @tailrec
+    private[this] def parseAnnotationList(ret: Seq[AST.Annotation] = Seq()): Seq[AST.Annotation] = {
+        peek match {
+            case Token.Operator(Token.`@`) => parseAnnotationList(ret :+ drop(parseAnnotation()))
+            case _                         => ret
+        }
     }
 
     /** Generic Parsing **/
 
     private[this] def parseGenericImpl(): Seq[AST.Type] = {
-        sequence(Token.`>`)(parseType())
+        sequence(Token.`]`)(parseAnonymousType())
     }
 
     private[this] def parseGenericSpec(): Seq[AST.GenericSpec] = {
@@ -212,15 +438,15 @@ case class Parser(tk: Tokenizer) extends Carrier {
 
     private[this] def parseGenericBounds(va: AST.Variance, name: AST.Name): AST.GenericSpec = {
         peek match {
-            case Token.Operator(Token.`>=`) => drop(parseGenericRanges(va, name, parseTypeName()))
-            case Token.Operator(Token.`<=`) => drop(AST.GenericSpec(name, va, None, Some(parseTypeName()))(name))
+            case Token.Operator(Token.`>=`) => drop(parseGenericRanges(va, name, parseNamedType()))
+            case Token.Operator(Token.`<=`) => drop(AST.GenericSpec(name, va, None, Some(parseNamedType()))(name))
             case _                          => AST.GenericSpec(name, va, None, None)(name)
         }
     }
 
     private[this] def parseGenericRanges(va: AST.Variance, name: AST.Name, lower: AST.TypeName): AST.GenericSpec = {
         peek match {
-            case Token.Operator(Token.`<=`) => drop(AST.GenericSpec(name, va, Some(lower), Some(parseTypeName()))(name))
+            case Token.Operator(Token.`<=`) => drop(AST.GenericSpec(name, va, Some(lower), Some(parseNamedType()))(name))
             case _                          => AST.GenericSpec(name, va, Some(lower), None)(name)
         }
     }
@@ -234,38 +460,52 @@ case class Parser(tk: Tokenizer) extends Carrier {
     }
 
     private[this] def parsePrimaryBase(): AST.Operand = {
-        peek match {
-            case Token.Nil()               => AST.Nil()(next)
-            case Token.Name(v)             => AST.Name(v)(next)
-            case Token.Bool(v)             => AST.BoolLit(v)(next)
-            case Token.Rune(v)             => AST.RuneLit(v)(next)
-            case Token.Float(v)            => AST.FloatLit(v)(next)
-            case Token.String(v)           => AST.StringLit(v)(next)
-            case Token.Integer(v)          => AST.IntegerLit(v)(next)
-            case Token.Complex(v)          => AST.ComplexLit(v)(next)
-            case Token.Keyword(Token.New)  => drop(parsePrimaryConstruct(parseTypeName()))
-            case Token.Operator(Token.`(`) => drop(ends(parseExpr(), Token.`)`))
+        save { implicit p => next match {
+            case Token.Nil()               => AST.Nil()
+            case Token.Name(v)             => AST.Name(v)
+            case Token.Bool(v)             => AST.BoolLit(v)
+            case Token.Rune(v)             => AST.RuneLit(v)
+            case Token.Float(v)            => AST.FloatLit(v)
+            case Token.String(v)           => AST.StringLit(v)
+            case Token.Integer(v)          => AST.IntegerLit(v)
+            case Token.Complex(v)          => AST.ComplexLit(v)
+            case Token.Keyword(Token.New)  => parsePrimaryConstruct(parseNamedType())
+            case Token.Operator(Token.`[`) => parsePrimaryInvoke(parseGenericImpl())
+            case Token.Operator(Token.`(`) => ends(parseExpr(), Token.`)`)
             case t                         => throw SyntaxError("operands expected, got " + t)
-        }
+        }}
     }
 
     @tailrec
     private[this] def parsePrimaryMods(ret: Seq[AST.Modifier]): Seq[AST.Modifier] = {
         peek match {
             case Token.Operator(Token.`(`) => parsePrimaryMods(ret :+ drop(parseInvoke()))
-            case Token.Operator(Token.`<`) => parsePrimaryMods(ret :+ drop(parseTypedInvoke()))
             case Token.Operator(Token.`[`) => parsePrimaryMods(ret :+ drop(parseIndexOrSlice()))
             case Token.Operator(Token.`.`) => parsePrimaryMods(ret :+ drop(parseMethodSelectorOrConversion()))
             case _                         => ret
         }
     }
 
-    private[this] def parsePrimaryConstruct(vt: AST.TypeName): AST.Construct = {
-        save { implicit p => peek match {
+    private[this] def parsePrimaryInvoke(gs: Seq[AST.Type])(implicit p: Snapshot): AST.FunctionCall = {
+        next match {
+            case n @ Token.Name(v) => AST.FunctionCall(AST.Name(v)(n), parseInvoke(gs))
+            case _                 => throw SyntaxError("function name expected")
+        }
+    }
+
+    private[this] def parsePrimaryConstruct(vt: AST.TypeName)(implicit p: Snapshot): AST.Construct = {
+        peek match {
             case Token.Operator(Token.`(`) => AST.Construct(vt, Some(drop(parseInvoke())))
-            case Token.Operator(Token.`<`) => AST.Construct(vt, Some(drop(parseTypedInvoke())))
+            case Token.Operator(Token.`[`) => AST.Construct(vt, Some(drop(parsePrimaryConstructArgs(parseGenericImpl()))))
             case _                         => AST.Construct(vt, None)
-        }}
+        }
+    }
+
+    private[this] def parsePrimaryConstructArgs(gs: Seq[AST.Type]): AST.Invoke = {
+        next match {
+            case Token.Operator(Token.`(`) => drop(parseInvoke(gs))
+            case _                         => throw SyntaxError("'(' expected")
+        }
     }
 
     /** Primary Modifier Parsing **/
@@ -310,16 +550,14 @@ case class Parser(tk: Tokenizer) extends Carrier {
         }
     }
 
-    private[this] def parseTypedInvoke(): AST.Invoke = {
-        parseBeginInvoke(parseGenericImpl())
-    }
-
-    private[this] def parseBeginInvoke(gs: Seq[AST.Type]): AST.Invoke = {
+    private[this] def parseInvokeMethod(gs: Seq[AST.Type]): AST.Method = {
         next match {
-            case Token.Operator(Token.`(`) => drop(parseInvoke(gs))
-            case _                         => throw SyntaxError("'(' expected")
+            case p @ Token.Name(v) => AST.Method(AST.Name(v)(p), parseInvoke(gs))(p)
+            case _                 => throw SyntaxError("method name expected")
         }
     }
+
+    /** Primary Modifier Disambiguous Parsing **/
 
     private[this] def parseIndexOrSlice(): AST.Modifier = {
         save { implicit p => peek match {
@@ -338,18 +576,18 @@ case class Parser(tk: Tokenizer) extends Carrier {
 
     private[this] def parseMethodOrSelector(name: AST.Name): AST.Modifier = {
         peek match {
-            case p @ Token.Operator(Token.`(`) => drop(AST.Method(name, parseInvoke())(p))
-            case p @ Token.Operator(Token.`<`) => drop(AST.Method(name, parseTypedInvoke())(p))
+            case p @ Token.Operator(Token.`(`) => AST.Method(name, drop(parseInvoke()))(p)
             case _                             => AST.Selector(name)(name)
         }
     }
 
     private[this] def parseMethodSelectorOrConversion(): AST.Modifier = {
-        peek match {
-            case Token.Name(v)             => drop(parseMethodOrSelector(AST.Name(v)))
-            case Token.Operator(Token.`(`) => drop(ends(AST.Conversion(parseType()), Token.`)`))
-            case _                         => throw SyntaxError("identifier or '(' expected")
-        }
+        save { implicit p => next match {
+            case Token.Name(v)             => parseMethodOrSelector(AST.Name(v))
+            case Token.Operator(Token.`(`) => ends(AST.Conversion(parseAnonymousType()), Token.`)`)
+            case Token.Operator(Token.`[`) => parseInvokeMethod(parseGenericImpl())
+            case _                         => throw SyntaxError("'(', '[' or identifier expected")
+        }}
     }
 
     /** Expression Parsing **/

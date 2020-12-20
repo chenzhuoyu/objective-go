@@ -84,6 +84,7 @@ class TestTokenizer {
             "import"    -> Token.Import,
             "in"        -> Token.In,
             "interface" -> Token.Interface,
+            "map"       -> Token.Map,
             "new"       -> Token.New,
             "override"  -> Token.Override,
             "package"   -> Token.Package,

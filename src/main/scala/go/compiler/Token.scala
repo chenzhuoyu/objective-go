@@ -34,6 +34,7 @@ object Token {
     case object Import    extends KeywordType
     case object In        extends KeywordType
     case object Interface extends KeywordType
+    case object Map       extends KeywordType
     case object New       extends KeywordType
     case object Nil       extends KeywordType
     case object Override  extends KeywordType
@@ -99,6 +100,8 @@ object Token {
     case object `;`   extends OperatorType
     case object `:`   extends OperatorType
     case object `?`   extends OperatorType
+    case object `@`   extends OperatorType
+    case object `@@`  extends OperatorType
 
     case class Prefix(op: OperatorType) extends OperatorType
     case class Postfix(op: OperatorType) extends OperatorType

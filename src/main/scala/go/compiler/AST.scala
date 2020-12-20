@@ -41,9 +41,12 @@ object AST {
 
     /** Types **/
 
-    case class ArrayType    (elem: Type, len: Option[Expression]) (implicit p: Location) extends AST with Type with CompositeType
-    case class PointerType  (base: Type)                          (implicit p: Location) extends AST with Type
-    case class FunctionType (fsig: FunctionSignature)             (implicit p: Location) extends AST with Type
+    case class MapType      (key: Type, elem: Type)                 (implicit p: Location) extends AST with Type with CompositeType
+    case class SliceType    (elem: Type)                            (implicit p: Location) extends AST with Type with CompositeType
+    case class ArrayType    (elem: Type, len: Option[Expression])   (implicit p: Location) extends AST with Type with CompositeType
+    case class ChannelType  (elem: Type, in: Boolean, out: Boolean) (implicit p: Location) extends AST with Type
+    case class PointerType  (base: Type)                            (implicit p: Location) extends AST with Type
+    case class FunctionType (fsig: FunctionSignature)               (implicit p: Location) extends AST with Type
 
     case class EnumType(
         vals: Seq[EnumItem],
@@ -99,9 +102,10 @@ object AST {
     )(implicit p: Location) extends AST
 
     case class InterfaceMethod(
-        name: Name,
-        fsig: FunctionSignature,
-        tags: Seq[Annotation],
+        name  : Name,
+        fsig  : FunctionSignature,
+        tags  : Seq[Annotation],
+        types : Seq[GenericSpec],
     )(implicit p: Location) extends AST
 
     case class FunctionArgument(
@@ -154,6 +158,11 @@ object AST {
         op    : Option[Operator] = None,
         right : Option[Expression] = None,
     )(implicit p: Location) extends AST with Operand with Element with SimpleStatement
+
+    case class FunctionCall(
+        name: Name,
+        args: Invoke,
+    )(implicit p: Location) extends AST with Operand
 
     case class CompositeValue   (vv: Seq[CompositeElement])            (implicit p: Location) extends AST with Element
     case class CompositeElement (key: Option[Element], value: Element) (implicit p: Location) extends AST
@@ -262,11 +271,6 @@ object AST {
     case class Return   (vals: Seq[Expression]) (implicit p: Location) extends AST with Statement
     case class Select   (iops: Seq[SelectCase]) (implicit p: Location) extends AST with Statement
     case class Continue (dest: Option[Name])    (implicit p: Location) extends AST with Statement
-
-    case class Incr(
-        incr: Boolean,
-        expr: Expression,
-    )(implicit p: Location) extends AST with SimpleStatement
 
     case class Send(
         chan: Expression,

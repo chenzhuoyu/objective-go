@@ -32,6 +32,7 @@ object Tokenizer {
         "import"    -> Token.Import,
         "in"        -> Token.In,
         "interface" -> Token.Interface,
+        "map"       -> Token.Map,
         "new"       -> Token.New,
         "nil"       -> Token.Nil,
         "override"  -> Token.Override,
@@ -99,6 +100,8 @@ object Tokenizer {
         ";"   -> Token.`;`,
         ":"   -> Token.`:`,
         "?"   -> Token.`?`,
+        "@"   -> Token.`@`,
+        "@@"  -> Token.`@@`,
     )
 
     private final val StdEscape = Map(
